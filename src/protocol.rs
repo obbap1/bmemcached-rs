@@ -14,7 +14,7 @@ enum Type {
     Response = 0x81,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 enum Command {
     Get = 0x00,
     Set = 0x01,
@@ -26,7 +26,7 @@ enum Command {
     // Quit = 0x07,
     // Flush = 0x08,
     // GetQ = 0x09,
-    // NoOp = 0x0A,
+    NoOp = 0x0A,
     // Version = 0x0B,
     // GetK = 0x0C,
     // GetKQ = 0x0D,
@@ -37,7 +37,7 @@ enum Command {
     // AddQ = 0x12,
     // ReplaceQ = 0x13,
     // DeleteQ = 0x14,
-    // IncrementQ = 0x15,
+    IncrementQ = 0x15,
     // DecrementQ = 0x16,
     // QuitQ = 0x17,
     // FlushQ = 0x18,
@@ -180,6 +180,12 @@ impl Protocol {
         Ok(())
     }
 
+    fn no_op_replace(&mut self, command: Command) -> Result<()>
+    {
+        let request = Protocol::build_request(command, 0, 0, 0, 0, 0).unwrap();
+        self.write_request(request, &[])
+    }
+
     fn set_add_replace<K, V>(&mut self, command: Command, key: K, value: V, time: u32) -> Result<()>
     where
         K: AsRef<[u8]>,
@@ -211,6 +217,10 @@ impl Protocol {
                 response.status
             ),
         }
+    }
+
+    pub fn no_op(&mut self) -> Result<()> {
+        self.no_op_replace(Command::NoOp)
     }
 
     pub fn set<K, V>(&mut self, key: K, value: V, time: u32) -> Result<()>
@@ -304,13 +314,16 @@ impl Protocol {
     {
         let key = key.as_ref();
         let extras_length = 20; // Amount: u64, Initial: u64, Time: u32
-        let request = Protocol::build_request(command, key.len(), 0, 0, extras_length, 0x00)?;
+        let request = Protocol::build_request(command.clone(), key.len(), 0, 0, extras_length, 0x00)?;
         let mut final_payload: Vec<u8> = vec![];
         final_payload.write_u64::<BigEndian>(amount)?;
         final_payload.write_u64::<BigEndian>(initial)?;
         final_payload.write_u32::<BigEndian>(time)?;
         final_payload.write(key)?;
         self.write_request(request, &final_payload)?;
+        if command == Command::IncrementQ {
+            return Ok(0)
+        }
         let response = self.read_response()?;
         match Status::from_u16(response.status) {
             Some(Status::Success) => Ok(self.connection.read_u64::<BigEndian>()?),
@@ -327,6 +340,13 @@ impl Protocol {
         K: AsRef<[u8]>,
     {
         self.increment_decrement(key, amount, initial, time, Command::Increment)
+    }
+
+    pub fn increment_quiet<K>(&mut self, key: K, amount: u64, initial: u64, time: u32) -> Result<u64>
+    where
+        K: AsRef<[u8]>,
+    {
+        self.increment_decrement(key, amount, initial, time, Command::IncrementQ)
     }
 
     pub fn decrement<K>(&mut self, key: K, amount: u64, initial: u64, time: u32) -> Result<u64>

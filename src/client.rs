@@ -106,6 +106,27 @@ impl MemcachedClient {
         protocol.increment(key, amount, initial, time)
     }
 
+    pub fn no_op(&self) {
+        let clonable_protocol = self.connections.get(&[]).unwrap();
+        let mut protocol = clonable_protocol.connection.lock().unwrap();
+        let _ = protocol.no_op();
+    }
+
+    pub fn increment_quiet<K>(
+        &self,
+        key: K,
+        amount: u64,
+        initial: u64,
+        time: u32,
+    ) -> Result<u64>
+    where
+        K: AsRef<[u8]>,
+    {
+        let clonable_protocol = self.connections.get(key.as_ref()).unwrap();
+        let mut protocol = clonable_protocol.connection.lock().unwrap();
+        protocol.increment_quiet(key, amount, initial, time)
+    }
+
     pub fn decrement<K>(
         &self,
         key: K,

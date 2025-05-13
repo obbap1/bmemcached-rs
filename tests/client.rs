@@ -46,6 +46,25 @@ fn get_set_delete() {
 }
 
 #[test]
+fn get_increment_quiet() {
+    let _ = env_logger::try_init();
+    let client = MemcachedClient::new(vec!["127.0.0.1:11211"], 1).unwrap();
+    let key = "counter";
+    let value = "1";
+    client.set(key, value, 5000).unwrap();
+    for x in 1..5{
+        let _ = client.increment_quiet(key, 1, x, 7000).unwrap();
+    }
+
+    // end batch
+    // client.no_op();
+
+    let new_value: String  = client.get(key).unwrap();
+    assert_eq!(new_value, "5");
+    
+}
+
+#[test]
 fn get_set_u8() {
     let _ = env_logger::try_init();
     let client = MemcachedClient::new(vec!["127.0.0.1:11211"], 1).unwrap();
